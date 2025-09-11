@@ -3,9 +3,9 @@ module github.com/8ff/firescrew
 go 1.21.0
 
 require (
-	github.com/8ff/onnxruntime_go v0.0.0-20230830191505-2b14a218432e
+	github.com/8ff/onnxruntime_go v0.0.0-20240904192313-7b5765bb9350
 	github.com/8ff/prettyTimer v0.0.0-20230830184900-c96793faf613
-	github.com/8ff/tuna v0.0.0-20230811173825-52af88c52674
+	github.com/8ff/tuna v0.0.0-20230817133642-c59e438f4651
 	github.com/asticode/go-astits v1.13.0
 	github.com/bluenviron/gortsplib/v3 v3.10.0
 	github.com/bluenviron/mediacommon v1.0.0
