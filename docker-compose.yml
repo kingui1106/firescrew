@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  firescrew:
+    image: 8fforg/firescrew:latest
+    container_name: firescrew
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./media:/media
+      - ./config.json:/config.json
+    command: ["/config.json"]
+    restart: unless-stopped
+    # 如果需要 Web UI，取消注释下面的端口映射
+    # ports:
+    #   - "8080:8080"
+
+  # 可选：Web UI 服务（如果需要分离运行）
+  firescrew-web:
+    image: 8fforg/firescrew:latest
+    container_name: firescrew-web
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./media:/media
+    command: ["-s", "/media", ":8080"]
+    restart: unless-stopped
+    profiles:
+      - web
