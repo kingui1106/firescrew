@@ -1,6 +1,6 @@
 module github.com/8ff/firescrew
 
-go 1.21.0
+
 
 require (
 	github.com/8ff/onnxruntime_go v0.0.0-20240904192313-7b5765bb9350
