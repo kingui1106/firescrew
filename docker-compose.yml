@@ -9,6 +9,8 @@ services:
     volumes:
       - ./media:/media
       - ./config-camera2.json:/config.json
+    ports:
+      - "8042:8042"
     command: ["/config.json"]
     restart: unless-stopped
     # 如果需要 Web UI，取消注释下面的端口映射
@@ -25,5 +27,3 @@ services:
       - ./media:/media
     command: ["-s", "/media", ":8080"]
     restart: unless-stopped
-    profiles:
-      - web

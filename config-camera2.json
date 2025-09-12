@@ -2,15 +2,15 @@
     "cameraName": "后门摄像头",
     "deviceUrl": "rtsp://192.168.102.29:554/rtp/32010600411317000012_32010600411317000012?originTypeStr=rtp_push",
     "loStreamParamBypass": {
-        "width": 0,
-        "height": 0,
-        "fps": 0
+       "width": 1920,
+        "height": 1080,
+        "fps": 25
     },
     "hiResDeviceUrl": "rtsp://192.168.102.29:554/rtp/32010600411317000012_32010600411317000012?originTypeStr=rtp_push",
     "hiStreamParamBypass": {
-        "width": 0,
-        "height": 0,
-        "fps": 0
+        "width": 1920,
+        "height": 1080,
+        "fps": 25
     },
     "printDebug": true,
     "video": {
@@ -26,7 +26,7 @@
         "onnxEnableCoreMl": false,
         "embeddedObjectScript": "objectDetectServerYolo.py",
         "networkObjectDetectServer": "",
-        "prebufferSeconds": 5,
+        "prebufferSeconds": 3,
         "eventGap": 10
     },
     "pixelMotionAreaThreshold": 50.00,

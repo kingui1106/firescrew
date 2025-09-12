@@ -616,7 +616,15 @@ func recordRTSPStream(rtspURL string, controlChannel <-chan RecordMsg, prebuffer
 	var file *os.File
 	recording := false
 
-	cmd := exec.Command("ffmpeg", "-rtsp_transport", "tcp", "-i", rtspURL, "-c", "copy", "-f", "mpegts", "pipe:1")
+	cmd := exec.Command("ffmpeg", 
+    "-rtsp_transport", "tcp",
+    "-buffer_size", "1024000",        // 增加缓冲区大小
+    "-max_delay", "500000",           // 最大延迟 0.5秒
+    "-fflags", "+genpts",             // 生成 PTS
+    "-i", rtspURL, 
+    "-c", "copy", 
+    "-f", "mpegts", 
+    "pipe:1")
 	pipe, err := cmd.StdoutPipe()
 	if err != nil {
 		Log("error", fmt.Sprintf("Error creating pipe: %v", err))
