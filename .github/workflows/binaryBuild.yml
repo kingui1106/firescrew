@@ -42,8 +42,8 @@ jobs:
       # - name: Build Darwin AMD64 binary
       #   run: GOOS=darwin GOARCH=amd64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.darwin.amd64"
       
-      - name: Build Linux ARM64 binary
-        run: GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.linux.arm64"
+      # - name: Build Linux ARM64 binary
+      #   run: GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.linux.arm64"
       
       - name: Build Linux AMD64 binary
         run: GOOS=linux GOARCH=amd64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.linux.amd64"
@@ -54,8 +54,8 @@ jobs:
       # - name: Build Windows ARM64 binary
       #   run: GOOS=windows GOARCH=amd64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/${{ env.BINARY_PREFIX }}.windows.arm64.exe"
 
-      - name: Build Linux ARM64 RTSP Server binary
-        run: cd demoStream/rtspServer; GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/rtspServer.linux.arm64"
+      # - name: Build Linux ARM64 RTSP Server binary
+      #   run: cd demoStream/rtspServer; GOOS=linux GOARCH=arm64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/rtspServer.linux.arm64"
 
       - name: Build Linux AMD64 RTSP Server binary
         run: cd demoStream/rtspServer; GOOS=linux GOARCH=amd64 go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "/tmp/build/rtspServer.linux.amd64"
