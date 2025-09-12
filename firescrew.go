@@ -98,10 +98,9 @@ type Config struct {
 		PrebufferSeconds          int      `json:"prebufferSeconds"`
 	} `json:"motion"`
 	Video struct {
-		HiResPath               string `json:"hiResPath"`
-		RecodeTsToMp4           bool   `json:"recodeTsToMp4"`
-		OnlyRemuxMp4            bool   `json:"onlyRemuxMp4"`
-		RecordWithDetectionBox  bool   `json:"recordWithDetectionBox"`
+		HiResPath     string `json:"hiResPath"`
+		RecodeTsToMp4 bool   `json:"recodeTsToMp4"`
+		OnlyRemuxMp4  bool   `json:"onlyRemuxMp4"`
 	} `json:"video"`
 	Events struct {
 		Mqtt struct {
@@ -143,7 +142,6 @@ type RuntimeConfig struct {
 	// MotionTriggeredChan chan bool `json:"motionTriggeredChan"`
 	// MotionHiRecOn bool `json:"motionHiRecOn"`
 	HiResControlChannel   chan RecordMsg
-	OverlayFrameChannel   chan FrameWithOverlay
 	MotionVideo           VideoMetadata
 	MotionMutex           *sync.Mutex
 	TextFont              *truetype.Font
@@ -240,20 +238,6 @@ type RecordMsg struct {
 	Filename string
 }
 
-// FrameWithOverlay struct for frames with detection overlays
-type FrameWithOverlay struct {
-	Frame       *image.RGBA
-	Detections  []Detection
-	Timestamp   time.Time
-}
-
-// Detection struct for storing detection information
-type Detection struct {
-	BBox       image.Rectangle
-	Class      string
-	Confidence float32
-}
-
 func readConfig(path string) Config {
 	// Read the configuration file.
 	configFile, err := os.ReadFile(path)
@@ -320,7 +304,6 @@ func readConfig(path string) Config {
 	Log("info", fmt.Sprintf("Video HiResPath: %s", config.Video.HiResPath))
 	Log("info", fmt.Sprintf("Video RecodeTsToMp4: %t", config.Video.RecodeTsToMp4))
 	Log("info", fmt.Sprintf("Video OnlyRemuxMp4: %t", config.Video.OnlyRemuxMp4))
-	Log("info", fmt.Sprintf("Video RecordWithDetectionBox: %t", config.Video.RecordWithDetectionBox))
 	Log("info", fmt.Sprintf("Motion OnnxModel: %s", config.Motion.OnnxModel))
 	Log("info", fmt.Sprintf("Motion OnnxEnableCoreMl: %t", config.Motion.OnnxEnableCoreMl))
 	Log("info", fmt.Sprintf("Motion Embedded Object Script: %s", config.Motion.EmbeddedObjectScript))
@@ -715,129 +698,6 @@ func recordRTSPStream(rtspURL string, controlChannel <-chan RecordMsg, prebuffer
 	}
 }
 
-// recordRTSPStreamWithOverlay records RTSP stream with detection overlays
-func recordRTSPStreamWithOverlay(rtspURL string, controlChannel <-chan RecordMsg, overlayChannel <-chan FrameWithOverlay, prebufferDuration time.Duration) {
-	var ffmpegCmd *exec.Cmd
-	var stdin io.WriteCloser
-	recording := false
-	
-	// Prebuffer for frames with overlay
-	type overlayChunkInfo struct {
-		Frame     *image.RGBA
-		Timestamp time.Time
-	}
-	
-	prebuffer := make([]overlayChunkInfo, 0)
-
-	for {
-		select {
-		case msg := <-controlChannel:
-			if msg.Record && !recording {
-				// Start FFmpeg with H.264 encoding from JPEG input
-				ffmpegCmd = exec.Command("ffmpeg",
-					"-f", "image2pipe",
-					"-vcodec", "mjpeg",
-					"-r", fmt.Sprintf("%.2f", runtimeConfig.HiResStreamParams.FPS),
-					"-i", "pipe:0",
-					"-vcodec", "libx264",
-					"-preset", "ultrafast",
-					"-crf", "23",
-					"-f", "mpegts",
-					msg.Filename)
-				
-				var err error
-				stdin, err = ffmpegCmd.StdinPipe()
-				if err != nil {
-					Log("error", fmt.Sprintf("Error creating stdin pipe: %v", err))
-					return
-				}
-				
-				err = ffmpegCmd.Start()
-				if err != nil {
-					Log("error", fmt.Sprintf("Error starting ffmpeg: %v", err))
-					return
-				}
-				
-				// Write prebuffered frames
-				for _, chunk := range prebuffer {
-					writeFrameToFFmpeg(stdin, chunk.Frame)
-				}
-				
-				recording = true
-				Log("info", "Started recording with detection overlay")
-				
-			} else if !msg.Record && recording {
-				if stdin != nil {
-					stdin.Close()
-				}
-				if ffmpegCmd != nil {
-					ffmpegCmd.Wait()
-				}
-				recording = false
-				Log("info", "Stopped recording with detection overlay")
-			}
-
-		case frameOverlay := <-overlayChannel:
-			if frameOverlay.Frame != nil {
-				// Apply detection overlays to frame
-				frameWithDetections := applyDetectionOverlay(frameOverlay.Frame, frameOverlay.Detections)
-				
-				// Prebuffer handling
-				timestamp := frameOverlay.Timestamp
-				prebuffer = append(prebuffer, overlayChunkInfo{Frame: frameWithDetections, Timestamp: timestamp})
-				
-				// Remove old frames from prebuffer
-				for len(prebuffer) > 1 && timestamp.Sub(prebuffer[0].Timestamp) > prebufferDuration {
-					prebuffer = prebuffer[1:]
-				}
-				
-				// Write frame to recording if active
-				if recording && stdin != nil {
-					writeFrameToFFmpeg(stdin, frameWithDetections)
-				}
-			}
-		}
-	}
-}
-
-// writeFrameToFFmpeg writes an RGBA frame to FFmpeg stdin as JPEG
-func writeFrameToFFmpeg(stdin io.WriteCloser, frame *image.RGBA) {
-	var buf bytes.Buffer
-	err := jpeg.Encode(&buf, frame, &jpeg.Options{Quality: 90})
-	if err != nil {
-		Log("error", fmt.Sprintf("Error encoding frame to JPEG: %v", err))
-		return
-	}
-	
-	_, err = stdin.Write(buf.Bytes())
-	if err != nil {
-		Log("error", fmt.Sprintf("Error writing frame to FFmpeg: %v", err))
-	}
-}
-
-// applyDetectionOverlay applies detection boxes and labels to a frame
-func applyDetectionOverlay(frame *image.RGBA, detections []Detection) *image.RGBA {
-	// Create a copy of the frame
-	result := image.NewRGBA(frame.Bounds())
-	draw.Draw(result, result.Bounds(), frame, frame.Bounds().Min, draw.Src)
-	
-	// Apply detection overlays
-	for _, detection := range detections {
-		// Draw rectangle
-		ob.DrawRectangle(result, detection.BBox, color.RGBA{255, 165, 0, 255}, 2)
-		
-		// Draw label
-		pt := image.Pt(detection.BBox.Min.X, detection.BBox.Min.Y-5)
-		if detection.BBox.Min.Y-5 < 0 {
-			pt = image.Pt(detection.BBox.Min.X, detection.BBox.Min.Y+20)
-		}
-		label := fmt.Sprintf("%s %.2f", detection.Class, detection.Confidence)
-		ob.AddLabelWithTTF(result, label, pt, color.RGBA{255, 165, 0, 255}, 12.0)
-	}
-	
-	return result
-}
-
 func recodeToMP4(inputFile string) (string, error) {
 	// Check if the input file has a .ts extension
 	if !strings.HasSuffix(inputFile, ".ts") {
@@ -923,10 +783,8 @@ func main() {
 		osRelease := runtime.GOOS
 		arch := runtime.GOARCH
 
-		downloadUrl := fmt.Sprintf("https://gh-proxy.com/https://github.com/8ff/firescrew/releases/download/latest/firescrew.%s.%s", osRelease, arch)
-		fmt.Println("Downloading from: ", downloadUrl)
 		// Build URL
-		e := tuna.SelfUpdate(downloadUrl)
+		e := tuna.SelfUpdate(fmt.Sprintf("https://github.com/8ff/firescrew/releases/download/latest/firescrew.%s.%s", osRelease, arch))
 		if e != nil {
 			fmt.Println(e)
 			os.Exit(1)
@@ -1091,26 +949,14 @@ func main() {
 
 	// Start HI Res prebuffering
 	runtimeConfig.HiResControlChannel = make(chan RecordMsg)
-	runtimeConfig.OverlayFrameChannel = make(chan FrameWithOverlay, 100) // Buffered channel
-	
-	if globalConfig.Video.RecordWithDetectionBox {
-		go func() {
-			for {
-				recordRTSPStreamWithOverlay(globalConfig.HiResDeviceUrl, runtimeConfig.HiResControlChannel, runtimeConfig.OverlayFrameChannel, time.Duration(globalConfig.Motion.PrebufferSeconds)*time.Second)
-				time.Sleep(5 * time.Second)
-				Log("warning", "Restarting HI RTSP feed with overlay")
-			}
-		}()
-	} else {
-		go func() {
-			for {
-				recordRTSPStream(globalConfig.HiResDeviceUrl, runtimeConfig.HiResControlChannel, time.Duration(globalConfig.Motion.PrebufferSeconds)*time.Second)
-				// defer close(runtimeConfig.HiResControlChannel)
-				time.Sleep(5 * time.Second)
-				Log("warning", "Restarting HI RTSP feed")
-			}
-		}()
-	}
+	go func() {
+		for {
+			recordRTSPStream(globalConfig.HiResDeviceUrl, runtimeConfig.HiResControlChannel, time.Duration(globalConfig.Motion.PrebufferSeconds)*time.Second)
+			// defer close(runtimeConfig.HiResControlChannel)
+			time.Sleep(5 * time.Second)
+			Log("warning", "Restarting HI RTSP feed")
+		}
+	}()
 
 	frameChannel := make(chan FrameMsg)
 	go func(frameChannel chan FrameMsg) {
@@ -1399,28 +1245,6 @@ func performDetectionOnObject(originalFrame *image.RGBA, frame *image.RGBA, pred
 				pt = image.Pt(predict.Left, predict.Top+20) // if the box is too close to the top of the image, put the label inside the box
 			}
 			ob.AddLabelWithTTF(frame, fmt.Sprintf("%s %.2f", predict.ClassName, predict.Confidence), pt, color.RGBA{255, 165, 0, 255}, 12.0) // Orange size 12 font
-
-			// Send frame with detection overlay to recording channel if enabled
-			if globalConfig.Video.RecordWithDetectionBox && originalFrame != nil {
-				detection := Detection{
-					BBox:       rect,
-					Class:      object.Class,
-					Confidence: object.Confidence,
-				}
-				
-				overlayFrame := FrameWithOverlay{
-					Frame:      originalFrame,
-					Detections: []Detection{detection},
-					Timestamp:  time.Now(),
-				}
-				
-				// Send to overlay channel (non-blocking)
-				select {
-				case runtimeConfig.OverlayFrameChannel <- overlayFrame:
-				default:
-					// Channel is full, skip this frame
-				}
-			}
 
 			// Store snapshot of the object
 			if runtimeConfig.MotionVideo.ID != "" {

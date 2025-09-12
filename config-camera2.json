@@ -17,7 +17,7 @@
         "hiResPath": "/media",
         "recodeTsToMp4": true,
         "onlyRemuxMp4": false,
-        "recordWithDetectionBox": true
+        "recordWithDetectionBox": false
     },
     "motion": {
         "confidenceMinThreshold": 0.3,
