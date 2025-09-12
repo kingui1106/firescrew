@@ -784,7 +784,7 @@ func main() {
 		arch := runtime.GOARCH
 
 		// Build URL
-		e := tuna.SelfUpdate(fmt.Sprintf("https://github.com/8ff/firescrew/releases/download/latest/firescrew.%s.%s", osRelease, arch))
+		e := tuna.SelfUpdate(fmt.Sprintf("https://gh-proxy.com/https://github.com/8ff/firescrew/releases/download/latest/firescrew.%s.%s", osRelease, arch))
 		if e != nil {
 			fmt.Println(e)
 			os.Exit(1)

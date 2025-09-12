@@ -1,4 +1,6 @@
 #!/bin/sh
+# 显示当前架构信息
+echo "Container architecture: $(uname -m)"
 
 fail() {
   echo "ERROR: $1"
@@ -23,6 +25,8 @@ if [ ! -f "$BINARY_PATH" ]; then
   echo "Binary not found for Architecture: $ARCH"
   exit 1
 fi
+echo "[+] Checking for updates..."
+${BINARY_PATH} update
 
 $BINARY_PATH "$@"
 
