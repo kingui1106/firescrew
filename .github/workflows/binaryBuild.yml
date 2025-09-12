@@ -80,7 +80,7 @@ jobs:
           go build -ldflags "-X 'main.Version=${{ env.RELEASE_DATE }}'" -o "../../build/rtspServer.${{ matrix.goos }}.${{ matrix.goarch }}"
       
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: binaries-${{ matrix.goos }}-${{ matrix.goarch }}
           path: build/*
@@ -104,7 +104,7 @@ jobs:
         run: wget https://github.com/8ff/releaseMaker/releases/download/latest/releaseMaker.linux.amd64 -O /tmp/releaseMaker && chmod +x /tmp/releaseMaker
       
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
       
