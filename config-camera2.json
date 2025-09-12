@@ -1,0 +1,59 @@
+{
+    "cameraName": "后门摄像头",
+    "deviceUrl": "rtsp://192.168.102.29:554/rtp/32010600411317000012_32010600411317000012?originTypeStr=rtp_push",
+    "loStreamParamBypass": {
+        "width": 0,
+        "height": 0,
+        "fps": 0
+    },
+    "hiResDeviceUrl": "rtsp://192.168.102.29:554/rtp/32010600411317000012_32010600411317000012?originTypeStr=rtp_push",
+    "hiStreamParamBypass": {
+        "width": 0,
+        "height": 0,
+        "fps": 0
+    },
+    "printDebug": true,
+    "video": {
+        "hiResPath": "/media",
+        "recodeTsToMp4": true,
+        "onlyRemuxMp4": false
+    },
+    "motion": {
+        "confidenceMinThreshold": 0.3,
+        "lookForClasses": ["car"],
+        "onnxModel": "yolov8m",
+        "onnxEnableCoreMl": false,
+        "embeddedObjectScript": "objectDetectServerYolo.py",
+        "networkObjectDetectServer": "",
+        "prebufferSeconds": 5,
+        "eventGap": 10
+    },
+    "pixelMotionAreaThreshold": 50.00,
+    "objectCenterMovementThreshold": 50.0,
+    "objectAreaThreshold": 2000.0,
+    "ignoreAreasClasses": [
+        {"class": ["template"], "coordinates": "0,0,0,0"}
+    ],
+    "streamDrawIgnoredAreas": false,
+    "enableOutputStream": true,
+    "outputStreamAddr": ":8042",
+    "events": {
+        "webhookUrl": "",
+        "scriptPath": "",
+        "slack": {
+            "url": ""
+        },
+        "mqtt": {
+            "host": "broker.hivemq.com",
+            "port": 1883,
+            "user": "",
+            "password": "",
+            "topic": "firescrew/camera2"
+        }
+    },
+    "notifications": {
+        "enablePushoverAlerts": false,
+        "pushoverAppToken": "",
+        "pushoverUserKey": ""
+    }
+}

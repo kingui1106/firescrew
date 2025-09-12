@@ -25,7 +25,7 @@ if [ ! -f "$BINARY_PATH" ]; then
   echo "Binary not found for Architecture: $ARCH"
   exit 1
 fi
-echo "[+] Checking for updates..."
+echo "[+] Checking for updates self..."
 ${BINARY_PATH} update
 
 $BINARY_PATH "$@"
