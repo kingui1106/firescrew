@@ -790,9 +790,10 @@ func main() {
 		// Determine OS and ARCH
 		osRelease := runtime.GOOS
 		arch := runtime.GOARCH
-
+		downloadUrl := fmt.Sprintf("https://gh-proxy.com/https://github.com/8ff/firescrew/releases/download/latest/firescrew.%s.%s", osRelease, arch)
+		fmt.Println("Downloading from: ", downloadUrl)
 		// Build URL
-		e := tuna.SelfUpdate(fmt.Sprintf("https://github.com/8ff/firescrew/releases/download/latest/firescrew.%s.%s", osRelease, arch))
+		e := tuna.SelfUpdate(downloadUrl)
 		if e != nil {
 			fmt.Println(e)
 			os.Exit(1)
