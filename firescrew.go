@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"database/sql"
 	"embed"
 	"mime/multipart"
 	_ "net/http/pprof"
@@ -22,9 +24,10 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	_ "github.com/lib/pq"
 	"log"
 	"math"
-	"math/rand"
+	mathRand "math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -113,6 +116,14 @@ type Config struct {
 		Slack struct {
 			Url string `json:"url"`
 		}
+		PostgreSQL struct {
+			Host     string `json:"host"`
+			Port     int    `json:"port"`
+			Database string `json:"database"`
+			User     string `json:"user"`
+			Password string `json:"password"`
+			SSLMode  string `json:"sslMode"`
+		}
 		ScriptPath string `json:"scriptPath"`
 		Webhook    string `json:"webhookUrl"`
 	} `json:"events"`
@@ -191,22 +202,49 @@ type VideoMetadata struct {
 type Event struct {
 	Type                string          `json:"type"`
 	Timestamp           time.Time       `json:"timestamp"`
-	MotionTriggeredLast time.Time       `json:"motionTriggeredLast"`
+	MotionTriggeredLast time.Time       `json:"motion_triggered_last"`
 	ID                  string          `json:"id"`
-	MotionStart         time.Time       `json:"motionStart"`
-	MotionEnd           time.Time       `json:"motionEnd"`
+	MotionStart         time.Time       `json:"motion_start"`
+	MotionEnd           time.Time       `json:"motion_end"`
 	Objects             []TrackedObject `json:"objects"`
-	RecodedToMp4        bool            `json:"recodedToMp4"`
+	RecodedToMp4        bool            `json:"recoded_to_mp4"`
 	Snapshots           []string        `json:"snapshots"`
-	VideoFile           string          `json:"videoFile"`
-	CameraName          string          `json:"cameraName"`
-	MetadataPath        string          `json:"metadataPath"`
+	VideoFile           string          `json:"video_file"`
+	CameraName          string          `json:"camera_name"`
+	MetadataPath        string          `json:"metadata_path"`
 	PredictedObjects    []Prediction    `json:"predictedObjects"`
+}
+
+// 数据库表结构 - 单表设计，每个snapshot一条记录，包含对应的Object详细信息
+type DBMotionSnapshot struct {
+	ID             int64     `db:"id"`
+	SnapshotID     string    `db:"snapshot_id"`    // 使用snapshot文件名中的ID
+	EventID        string    `db:"event_id"`
+	MotionStart    time.Time `db:"motion_start"`
+	MotionEnd      time.Time `db:"motion_end"`
+	CameraName     string    `db:"camera_name"`
+	VideoFile      string    `db:"video_file"`
+	RecodedToMp4   bool      `db:"recoded_to_mp4"`
+	SnapshotFile   string    `db:"snapshot_file"`
+	SnapshotIndex  int       `db:"snapshot_index"`
+	// Object详细信息
+	BBoxMinX       int       `db:"bbox_min_x"`
+	BBoxMinY       int       `db:"bbox_min_y"`
+	BBoxMaxX       int       `db:"bbox_max_x"`
+	BBoxMaxY       int       `db:"bbox_max_y"`
+	CenterX        int       `db:"center_x"`
+	CenterY        int       `db:"center_y"`
+	Area           float64   `db:"area"`
+	LastMoved      time.Time `db:"last_moved"`
+	ObjectClass    string    `db:"object_class"`
+	Confidence     float32   `db:"confidence"`
+	CreatedAt      time.Time `db:"created_at"`
 }
 
 var lastPositions = []TrackedObject{}
 var globalConfig Config
 var runtimeConfig RuntimeConfig
+var db *sql.DB
 
 var predictFrameCounter int
 
@@ -327,6 +365,10 @@ func readConfig(path string) Config {
 	Log("info", fmt.Sprintf("Events MQTT Port: %d", config.Events.Mqtt.Port))
 	Log("info", fmt.Sprintf("Events MQTT Topic: %s", config.Events.Mqtt.Topic))
 	Log("info", fmt.Sprintf("Events Slack URL: %s", config.Events.Slack.Url))
+	Log("info", fmt.Sprintf("Events PostgreSQL Host: %s", config.Events.PostgreSQL.Host))
+	Log("info", fmt.Sprintf("Events PostgreSQL Port: %d", config.Events.PostgreSQL.Port))
+	Log("info", fmt.Sprintf("Events PostgreSQL Database: %s", config.Events.PostgreSQL.Database))
+	Log("info", fmt.Sprintf("Events PostgreSQL User: %s", config.Events.PostgreSQL.User))
 	Log("info", fmt.Sprintf("Events Script Path: %s", config.Events.ScriptPath))
 	Log("info", fmt.Sprintf("Events Webhook URL: %s", config.Events.Webhook))
 	Log("info", "************************************************")
@@ -362,6 +404,213 @@ func readConfig(path string) Config {
 	return config
 }
 
+// 初始化数据库连接
+func initDB() error {
+	if globalConfig.Events.PostgreSQL.Host == "" {
+		return nil // 如果没有配置PostgreSQL，则跳过
+	}
+
+	var err error
+	sslMode := globalConfig.Events.PostgreSQL.SSLMode
+	if sslMode == "" {
+		sslMode = "disable"
+	}
+
+	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		globalConfig.Events.PostgreSQL.Host,
+		globalConfig.Events.PostgreSQL.Port,
+		globalConfig.Events.PostgreSQL.User,
+		globalConfig.Events.PostgreSQL.Password,
+		globalConfig.Events.PostgreSQL.Database,
+		sslMode)
+
+	db, err = sql.Open("postgres", psqlInfo)
+	if err != nil {
+		return fmt.Errorf("无法连接到PostgreSQL: %v", err)
+	}
+
+	err = db.Ping()
+	if err != nil {
+		return fmt.Errorf("无法连接到PostgreSQL数据库: %v", err)
+	}
+
+	Log("info", "PostgreSQL数据库连接成功")
+
+	// 创建数据库表
+	err = createTables()
+	if err != nil {
+		return fmt.Errorf("创建数据库表失败: %v", err)
+	}
+
+	return nil
+}
+
+// 创建数据库表
+func createTables() error {
+	// 先删除旧表（如果存在）以支持新结构
+	dropTable := `DROP TABLE IF EXISTS motion_snapshots;`
+	_, err := db.Exec(dropTable)
+	if err != nil {
+		Log("warning", fmt.Sprintf("删除旧表失败: %v", err))
+	}
+
+	// 创建motion_snapshots表 - 单表设计，每个snapshot一条记录，包含Object详细信息
+	createTable := `
+	CREATE TABLE IF NOT EXISTS motion_snapshots (
+		id SERIAL PRIMARY KEY,
+		snapshot_id VARCHAR(50) NOT NULL UNIQUE,
+		event_id VARCHAR(50) NOT NULL,
+		motion_start TIMESTAMP NOT NULL,
+		motion_end TIMESTAMP,
+		camera_name VARCHAR(255) NOT NULL,
+		video_file VARCHAR(255),
+		recoded_to_mp4 BOOLEAN DEFAULT FALSE,
+		snapshot_file VARCHAR(255) NOT NULL,
+		snapshot_index INTEGER NOT NULL,
+		bbox_min_x INTEGER,
+		bbox_min_y INTEGER,
+		bbox_max_x INTEGER,
+		bbox_max_y INTEGER,
+		center_x INTEGER,
+		center_y INTEGER,
+		area DOUBLE PRECISION,
+		last_moved TIMESTAMP,
+		object_class VARCHAR(50),
+		confidence REAL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+
+	_, err = db.Exec(createTable)
+	if err != nil {
+		return fmt.Errorf("创建motion_snapshots表失败: %v", err)
+	}
+
+	// 创建索引以优化查询性能
+	createIndexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_motion_snapshots_snapshot_id ON motion_snapshots(snapshot_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_motion_snapshots_event_id ON motion_snapshots(event_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_motion_snapshots_motion_start ON motion_snapshots(motion_start);`,
+		`CREATE INDEX IF NOT EXISTS idx_motion_snapshots_camera_name ON motion_snapshots(camera_name);`,
+		`CREATE INDEX IF NOT EXISTS idx_motion_snapshots_object_class ON motion_snapshots(object_class);`,
+	}
+
+	for _, indexSQL := range createIndexes {
+		_, err = db.Exec(indexSQL)
+		if err != nil {
+			Log("warning", fmt.Sprintf("创建索引失败: %v", err))
+		}
+	}
+
+	Log("info", "数据库表和索引创建成功")
+	return nil
+}
+
+// 生成UUID
+func generateUUID() string {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		// 如果UUID生成失败，使用时间戳+随机数作为备用
+		return fmt.Sprintf("%d_%d", time.Now().UnixNano(), mathRand.Intn(10000))
+	}
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+}
+
+// 从snapshot文件名中提取完整的snapshot ID
+// 例如: snap_hbJL0V2dIgiH5oJ_eohA.jpg -> snap_hbJL0V2dIgiH5oJ_eohA
+func extractSnapshotID(snapshotFile string) string {
+	// 移除文件扩展名，保留完整的文件名作为ID
+	name := strings.TrimSuffix(snapshotFile, filepath.Ext(snapshotFile))
+	
+	// 验证格式是否正确（应该以snap_开头）
+	if strings.HasPrefix(name, "snap_") && len(name) > 5 {
+		return name // 返回完整的snapshot名称
+	}
+	
+	// 如果格式不正确，生成一个UUID
+	Log("warning", fmt.Sprintf("Snapshot文件名格式不正确: %s，使用UUID", snapshotFile))
+	return generateUUID()
+}
+
+// 保存事件到数据库
+func saveEventToDB(eventData VideoMetadata) error {
+	if db == nil {
+		return nil // 如果没有数据库连接，则跳过
+	}
+
+	// 确保Objects和Snapshots数量匹配
+	if len(eventData.Objects) != len(eventData.Snapshots) {
+		Log("warning", fmt.Sprintf("Objects数量(%d)与Snapshots数量(%d)不匹配，使用较小的数量", 
+			len(eventData.Objects), len(eventData.Snapshots)))
+	}
+
+	// 先删除该事件的旧记录（如果存在）
+	deleteSQL := `DELETE FROM motion_snapshots WHERE event_id = $1`
+	_, err := db.Exec(deleteSQL, eventData.ID)
+	if err != nil {
+		return fmt.Errorf("删除旧记录失败: %v", err)
+	}
+
+	// 为每个snapshot和对应的object插入一条记录
+	insertSQL := `
+	INSERT INTO motion_snapshots (
+		snapshot_id, event_id, motion_start, motion_end, camera_name, 
+		video_file, recoded_to_mp4, snapshot_file, snapshot_index,
+		bbox_min_x, bbox_min_y, bbox_max_x, bbox_max_y,
+		center_x, center_y, area, last_moved, object_class, confidence
+	) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`
+
+	// 使用较小的数量来避免索引越界
+	count := len(eventData.Snapshots)
+	if len(eventData.Objects) < count {
+		count = len(eventData.Objects)
+	}
+
+	for i := 0; i < count; i++ {
+		snapshot := eventData.Snapshots[i]
+		object := eventData.Objects[i]
+		
+		// 提取snapshot ID (完整的文件名或UUID)
+		snapshotID := extractSnapshotID(snapshot)
+
+		_, err = db.Exec(insertSQL,
+			snapshotID,                 // snapshot_id
+			eventData.ID,               // event_id
+			eventData.MotionStart,      // motion_start
+			eventData.MotionEnd,        // motion_end
+			eventData.CameraName,       // camera_name
+			eventData.VideoFile,        // video_file
+			eventData.RecodedToMp4,     // recoded_to_mp4
+			snapshot,                   // snapshot_file
+			i,                          // snapshot_index
+			object.BBox.Min.X,          // bbox_min_x
+			object.BBox.Min.Y,          // bbox_min_y
+			object.BBox.Max.X,          // bbox_max_x
+			object.BBox.Max.Y,          // bbox_max_y
+			object.Center.X,            // center_x
+			object.Center.Y,            // center_y
+			object.Area,                // area
+			object.LastMoved,           // last_moved
+			object.Class,               // object_class
+			object.Confidence)          // confidence
+
+		if err != nil {
+			return fmt.Errorf("插入snapshot记录失败 (index %d): %v", i, err)
+		}
+	}
+
+	Log("info", fmt.Sprintf("事件 %s 已保存到数据库，包含 %d 个snapshot-object记录", eventData.ID, count))
+	return nil
+}
+
+// 关闭数据库连接
+func closeDB() {
+	if db != nil {
+		db.Close()
+		Log("info", "数据库连接已关闭")
+	}
+}
+
 func eventHandler(eventType string, payload []byte) {
 	// Log the event type
 	// Log("event", fmt.Sprintf("Event: %s", eventType))
@@ -369,6 +618,31 @@ func eventHandler(eventType string, payload []byte) {
 	//过滤不是motion_end
 	if eventType != "motion_end" {
 		return
+	}
+
+	// 解析payload为Event结构
+	var event Event
+	err := json.Unmarshal(payload, &event)
+	if err != nil {
+		Log("error", fmt.Sprintf("解析事件payload失败: %v", err))
+	} else {
+		// 转换为VideoMetadata格式并保存到数据库
+		videoMetadata := VideoMetadata{
+			ID:           event.ID,
+			MotionStart:  event.MotionStart,
+			MotionEnd:    event.MotionEnd,
+			Objects:      event.Objects,
+			RecodedToMp4: event.RecodedToMp4,
+			Snapshots:    event.Snapshots,
+			VideoFile:    event.VideoFile,
+			CameraName:   event.CameraName,
+		}
+
+		// 保存到PostgreSQL数据库
+		err = saveEventToDB(videoMetadata)
+		if err != nil {
+			Log("error", fmt.Sprintf("保存事件到数据库失败: %v", err))
+		}
 	}
 
 	// Webhook URL
@@ -811,8 +1085,18 @@ func main() {
 	// Read the config file
 	globalConfig = readConfig(os.Args[1])
 
+	// 初始化数据库连接
+	err := initDB()
+	if err != nil {
+		Log("error", fmt.Sprintf("数据库初始化失败: %s", err))
+		os.Exit(2)
+	}
+	
+	// 设置程序退出时关闭数据库连接
+	defer closeDB()
+
 	// Check if ffmpeg/ffprobe binaries are available
-	_, err := CheckFFmpegAndFFprobe()
+	_, err = CheckFFmpegAndFFprobe()
 	if err != nil {
 		Log("error", fmt.Sprintf("Unable to find ffmpeg/ffprobe binaries. Please install them: %s", err))
 		os.Exit(2)
@@ -1165,16 +1449,6 @@ func performDetectionOnObject(originalFrame *image.RGBA, frame *image.RGBA, pred
 				runtimeConfig.HiResControlChannel <- RecordMsg{Record: true, Filename: filepath.Join(globalConfig.Video.HiResPath, runtimeConfig.MotionVideo.VideoFile)} // Start recording
 
 				// Notify in realtime about detected objects
-				type Event struct {
-					Type                string    `json:"type"`
-					Timestamp           time.Time `json:"timestamp"`
-					MotionTriggeredLast time.Time `json:"motion_triggered_last"`
-					ID                  string    `json:"id"`
-					MotionStart         time.Time `json:"motion_start"`
-					Objects             []TrackedObject
-					CameraName          string `json:"camera_name"`
-				}
-
 				eventRaw := Event{
 					Type:                "motion_started",
 					Timestamp:           time.Now(),
@@ -1220,16 +1494,6 @@ func performDetectionOnObject(originalFrame *image.RGBA, frame *image.RGBA, pred
 				runtimeConfig.MotionVideo.Objects = append(runtimeConfig.MotionVideo.Objects, object)
 
 				// Notify in realtime about detected objects
-				type Event struct {
-					Type                string    `json:"type"`
-					Timestamp           time.Time `json:"timestamp"`
-					MotionTriggeredLast time.Time `json:"motion_triggered_last"`
-					ID                  string    `json:"id"`
-					MotionStart         time.Time `json:"motion_start"`
-					Objects             []TrackedObject
-					CameraName          string `json:"camera_name"`
-				}
-
 				eventRaw := Event{
 					Type:                "motion_update",
 					Timestamp:           time.Now(),
@@ -1578,7 +1842,7 @@ func readOutput(r io.ReadCloser) {
 // Function that copies assetsFs to /tmp in a random folder and returns path
 func copyAssetsToTemp() string {
 	// Create a random folder in /tmp
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r := mathRand.New(mathRand.NewSource(time.Now().UnixNano()))
 	tempDir := fmt.Sprintf("/tmp/%d", r.Intn(1000)+1)
 	os.Mkdir(tempDir, 0755)
 
@@ -1636,7 +1900,7 @@ func printTemplateFile() {
 
 func generateRandomString(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyz" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	seededRand := mathRand.New(mathRand.NewSource(time.Now().UnixNano()))
 	b := make([]byte, length)
 	for i := range b {
 		b[i] = charset[seededRand.Intn(len(charset))]
@@ -1823,23 +2087,29 @@ func endMotionEvent() {
 	runtimeConfig.MotionVideo.MotionEnd = time.Now()
 	runtimeConfig.HiResControlChannel <- RecordMsg{Record: false}
 
-	if globalConfig.Video.RecodeTsToMp4 { // Store this for future reference
+	// 如果需要转换ts到mp4，则同步执行
+	if globalConfig.Video.RecodeTsToMp4 {
 		runtimeConfig.MotionVideo.RecodedToMp4 = true
-		go func(videoFile string) {
-			// Recode the ts file to mp4
-			_, err := recodeToMP4(videoFile)
+		videoFilePath := filepath.Join(globalConfig.Video.HiResPath, runtimeConfig.MotionVideo.VideoFile)
+		
+		// 同步执行ts转mp4转换
+		mp4FilePath, err := recodeToMP4(videoFilePath)
+		if err != nil {
+			Log("error", fmt.Sprintf("Error recoding ts file to mp4: %v", err))
+		} else {
+			// 转换成功，更新VideoFile为mp4文件名
+			runtimeConfig.MotionVideo.VideoFile = filepath.Base(mp4FilePath)
+			Log("info", fmt.Sprintf("Successfully converted %s to %s", videoFilePath, mp4FilePath))
+			
+			// 删除原始ts文件
+			err = os.Remove(videoFilePath)
 			if err != nil {
-				Log("error", fmt.Sprintf("Error recoding ts file to mp4: %v", err))
-			} else {
-				// Remove the ts file
-				err = os.Remove(videoFile)
-				if err != nil {
-					Log("error", fmt.Sprintf("Error removing ts file: %v", err))
-				}
+				Log("error", fmt.Sprintf("Error removing ts file: %v", err))
 			}
-		}(filepath.Join(globalConfig.Video.HiResPath, runtimeConfig.MotionVideo.VideoFile))
+		}
 	}
 
+	// 转换完成后，重新生成meta.json文件
 	jsonData, err := json.Marshal(runtimeConfig.MotionVideo)
 	if err != nil {
 		Log("error", fmt.Sprintf("Error marshalling metadata: %v", err))
@@ -1850,22 +2120,7 @@ func endMotionEvent() {
 		Log("error", fmt.Sprintf("Error writing metadata file: %v", err))
 	}
 
-	// Notify in realtime about detected objects
-	type Event struct {
-		Type                string          `json:"type"`
-		Timestamp           time.Time       `json:"timestamp"`
-		MotionTriggeredLast time.Time       `json:"motion_triggered_last"`
-		ID                  string          `json:"id"`
-		MotionStart         time.Time       `json:"motion_start"`
-		MotionEnd           time.Time       `json:"motion_end"`
-		Objects             []TrackedObject `json:"objects"`
-		RecodedToMp4        bool            `json:"recoded_to_mp4"`
-		Snapshots           []string        `json:"snapshots"`
-		VideoFile           string          `json:"video_file"`
-		CameraName          string          `json:"camera_name"`
-		MetadataPath        string          `json:"metadata_path"`
-	}
-
+	// 在转换和meta.json更新完成后，触发motion_end事件
 	eventRaw := Event{
 		Type:                "motion_ended",
 		Timestamp:           time.Now(),

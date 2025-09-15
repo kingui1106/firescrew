@@ -1,6 +1,8 @@
 FROM docker.cattt.net/golang:latest AS firescrew-build-stage
 WORKDIR /build
 COPY . .
+RUN go env -w GO111MODULE=on
+RUN go env -w GOPROXY=https://goproxy.cn,direct
 RUN ls -la; go mod download
 RUN mkdir /bins
 RUN GOOS=linux GOARCH=amd64 go build -ldflags "-X 'main.Version=$(date +'%Y-%m-%d_%H:%M:%S')'" -o /bins/firescrew.linux.amd64
