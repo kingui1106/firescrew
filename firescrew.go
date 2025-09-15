@@ -217,8 +217,7 @@ type Event struct {
 
 // 数据库表结构 - 单表设计，每个snapshot一条记录，包含对应的Object详细信息
 type DBMotionSnapshot struct {
-	ID             int64     `db:"id"`
-	SnapshotID     string    `db:"snapshot_id"`    // 使用snapshot文件名中的ID
+	SnapshotID     string    `db:"snapshot_id"`    // 使用snapshot文件名中的ID作为主键
 	EventID        string    `db:"event_id"`
 	MotionStart    time.Time `db:"motion_start"`
 	MotionEnd      time.Time `db:"motion_end"`
@@ -437,10 +436,10 @@ func initDB() error {
 	Log("info", "PostgreSQL数据库连接成功")
 
 	// 创建数据库表
-	err = createTables()
-	if err != nil {
-		return fmt.Errorf("创建数据库表失败: %v", err)
-	}
+	// err = createTables()
+	// if err != nil {
+	// 	return fmt.Errorf("创建数据库表失败: %v", err)
+	// }
 
 	return nil
 }
@@ -457,8 +456,7 @@ func createTables() error {
 	// 创建motion_snapshots表 - 单表设计，每个snapshot一条记录，包含Object详细信息
 	createTable := `
 	CREATE TABLE IF NOT EXISTS motion_snapshots (
-		id SERIAL PRIMARY KEY,
-		snapshot_id VARCHAR(50) NOT NULL UNIQUE,
+		snapshot_id VARCHAR(50) PRIMARY KEY,
 		event_id VARCHAR(50) NOT NULL,
 		motion_start TIMESTAMP NOT NULL,
 		motion_end TIMESTAMP,
@@ -487,7 +485,6 @@ func createTables() error {
 
 	// 创建索引以优化查询性能
 	createIndexes := []string{
-		`CREATE INDEX IF NOT EXISTS idx_motion_snapshots_snapshot_id ON motion_snapshots(snapshot_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_motion_snapshots_event_id ON motion_snapshots(event_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_motion_snapshots_motion_start ON motion_snapshots(motion_start);`,
 		`CREATE INDEX IF NOT EXISTS idx_motion_snapshots_camera_name ON motion_snapshots(camera_name);`,

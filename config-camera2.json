@@ -21,7 +21,7 @@
     },
     "motion": {
         "confidenceMinThreshold": 0.3,
-        "lookForClasses": ["person"],
+        "lookForClasses": ["car"],
         "onnxModel": "yolov8m",
         "onnxEnableCoreMl": false,
         "embeddedObjectScript": "objectDetectServerYolo.py",
