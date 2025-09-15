@@ -1,12 +1,12 @@
 {
     "cameraName": "后门摄像头",
-    "deviceUrl": "rtsp://192.168.102.29:554/rtp/32010600411317000012_32010600411317000012?originTypeStr=rtp_push",
+    "deviceUrl": "rtsp://192.168.102.25:8554/hi",
     "loStreamParamBypass": {
        "width": 1920,
         "height": 1080,
         "fps": 25
     },
-    "hiResDeviceUrl": "rtsp://192.168.102.29:554/rtp/32010600411317000012_32010600411317000012?originTypeStr=rtp_push",
+    "hiResDeviceUrl": "rtsp://192.168.102.25:8554/hi",
     "hiStreamParamBypass": {
         "width": 1920,
         "height": 1080,
@@ -21,7 +21,7 @@
     },
     "motion": {
         "confidenceMinThreshold": 0.3,
-        "lookForClasses": ["car"],
+        "lookForClasses": ["person"],
         "onnxModel": "yolov8m",
         "onnxEnableCoreMl": false,
         "embeddedObjectScript": "objectDetectServerYolo.py",
@@ -45,11 +45,11 @@
             "url": ""
         },
         "mqtt": {
-            "host": "broker.hivemq.com",
+            "host": "",
             "port": 1883,
             "user": "",
             "password": "",
-            "topic": "firescrew/camera2"
+            "topic": ""
         }
     },
     "notifications": {

@@ -1082,9 +1082,9 @@ func main() {
 				}
 			}
 
-			// if globalConfig.EnableOutputStream {
-			// 	streamImage(rgba, stream) // Stream the image to the web
-			// }
+			if globalConfig.EnableOutputStream {
+				streamImage(rgba, stream) // Stream the image to the web
+			}
 
 			imgLast = rgba // Set the last image to the current image
 

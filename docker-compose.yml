@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   firescrew:
-    image: 192.168.102.29:89/fforg/firescrew:latest     
+    image: 192.168.102.29:89/8fforg/firescrew:latest     
     container_name: firescrew
     stdin_open: true
     tty: true
@@ -19,7 +19,7 @@ services:
 
   # 可选：Web UI 服务（如果需要分离运行）
   firescrew-web:
-    image: 192.168.102.29:89/fforg/firescrew:latest     
+    image: 192.168.102.29:89/8fforg/firescrew:latest     
     container_name: firescrew-web
     ports:
       - "8080:8080"
