@@ -352,3 +352,6 @@ Your insights and perspectives are vital in shaping the future of Firescrew. Tog
 - HA Integration
 - Standardize the way adapter scripts return data
 - Yaml Config ?
+
+
+ffmpeg -stream_loop -1 -re -i sample.mp4  -c:v libx264 -preset veryfast -tune zerolatency -g 5 -r 25 -s 1920x1080 -b:v 5000k -rtsp_transport tcp -f rtsp rtsp://192.168.102.25:8554/hi

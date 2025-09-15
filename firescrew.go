@@ -366,6 +366,11 @@ func eventHandler(eventType string, payload []byte) {
 	// Log the event type
 	// Log("event", fmt.Sprintf("Event: %s", eventType))
 
+	//过滤不是motion_end
+	if eventType != "motion_end" {
+		return
+	}
+
 	// Webhook URL
 	if globalConfig.Events.Webhook != "" {
 		resp, err := http.Post(globalConfig.Events.Webhook, "application/json", bytes.NewReader(payload))
@@ -1846,41 +1851,41 @@ func endMotionEvent() {
 	}
 
 	// Notify in realtime about detected objects
-	// type Event struct {
-	// 	Type                string          `json:"type"`
-	// 	Timestamp           time.Time       `json:"timestamp"`
-	// 	MotionTriggeredLast time.Time       `json:"motion_triggered_last"`
-	// 	ID                  string          `json:"id"`
-	// 	MotionStart         time.Time       `json:"motion_start"`
-	// 	MotionEnd           time.Time       `json:"motion_end"`
-	// 	Objects             []TrackedObject `json:"objects"`
-	// 	RecodedToMp4        bool            `json:"recoded_to_mp4"`
-	// 	Snapshots           []string        `json:"snapshots"`
-	// 	VideoFile           string          `json:"video_file"`
-	// 	CameraName          string          `json:"camera_name"`
-	// 	MetadataPath        string          `json:"metadata_path"`
-	// }
+	type Event struct {
+		Type                string          `json:"type"`
+		Timestamp           time.Time       `json:"timestamp"`
+		MotionTriggeredLast time.Time       `json:"motion_triggered_last"`
+		ID                  string          `json:"id"`
+		MotionStart         time.Time       `json:"motion_start"`
+		MotionEnd           time.Time       `json:"motion_end"`
+		Objects             []TrackedObject `json:"objects"`
+		RecodedToMp4        bool            `json:"recoded_to_mp4"`
+		Snapshots           []string        `json:"snapshots"`
+		VideoFile           string          `json:"video_file"`
+		CameraName          string          `json:"camera_name"`
+		MetadataPath        string          `json:"metadata_path"`
+	}
 
-	// eventRaw := Event{
-	// 	Type:                "motion_ended",
-	// 	Timestamp:           time.Now(),
-	// 	MotionTriggeredLast: runtimeConfig.MotionTriggeredLast,
-	// 	ID:                  runtimeConfig.MotionVideo.ID,
-	// 	MotionStart:         runtimeConfig.MotionVideo.MotionStart,
-	// 	MotionEnd:           runtimeConfig.MotionVideo.MotionEnd,
-	// 	Objects:             runtimeConfig.MotionVideo.Objects,
-	// 	RecodedToMp4:        runtimeConfig.MotionVideo.RecodedToMp4,
-	// 	Snapshots:           runtimeConfig.MotionVideo.Snapshots,
-	// 	VideoFile:           runtimeConfig.MotionVideo.VideoFile,
-	// 	CameraName:          runtimeConfig.MotionVideo.CameraName,
-	// 	MetadataPath:        filepath.Join(globalConfig.Video.HiResPath, fmt.Sprintf("meta_%s.json", runtimeConfig.MotionVideo.ID)),
-	// }
-	// eventJson, err := json.Marshal(eventRaw)
-	// if err != nil {
-	// 	Log("error", fmt.Sprintf("Error marshalling motion_ended event: %v", err))
-	// 	return
-	// }
-	// eventHandler("motion_end", eventJson)
+	eventRaw := Event{
+		Type:                "motion_ended",
+		Timestamp:           time.Now(),
+		MotionTriggeredLast: runtimeConfig.MotionTriggeredLast,
+		ID:                  runtimeConfig.MotionVideo.ID,
+		MotionStart:         runtimeConfig.MotionVideo.MotionStart,
+		MotionEnd:           runtimeConfig.MotionVideo.MotionEnd,
+		Objects:             runtimeConfig.MotionVideo.Objects,
+		RecodedToMp4:        runtimeConfig.MotionVideo.RecodedToMp4,
+		Snapshots:           runtimeConfig.MotionVideo.Snapshots,
+		VideoFile:           runtimeConfig.MotionVideo.VideoFile,
+		CameraName:          runtimeConfig.MotionVideo.CameraName,
+		MetadataPath:        filepath.Join(globalConfig.Video.HiResPath, fmt.Sprintf("meta_%s.json", runtimeConfig.MotionVideo.ID)),
+	}
+	eventJson, err := json.Marshal(eventRaw)
+	if err != nil {
+		Log("error", fmt.Sprintf("Error marshalling motion_ended event: %v", err))
+		return
+	}
+	eventHandler("motion_end", eventJson)
 
 	// 	// Clear the whole runtimeConfig.MotionVideo struct
 	runtimeConfig.MotionVideo = VideoMetadata{}

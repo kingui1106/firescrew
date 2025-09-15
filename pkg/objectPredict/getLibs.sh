@@ -1,34 +1,34 @@
 #!/bin/bash
 function get_linux_amd64_cpu() {
-    verString="linux-x64-1.15.1"
+    verString="linux-x64-1.18.0"
     dstDir="linux_amd64_cpu"
     rm -rf ${dstDir}; mkdir -p ${dstDir} 2>/dev/null
-    curl -o onnxruntime-${verString}.tgz -L https://github.com/microsoft/onnxruntime/releases/download/v1.15.1/onnxruntime-${verString}.tgz
+    curl -o onnxruntime-${verString}.tgz -L https://github.com/microsoft/onnxruntime/releases/download/v1.18.0/onnxruntime-${verString}.tgz
     tar -xzf onnxruntime-${verString}.tgz --strip-components=2 -C ${dstDir} onnxruntime-${verString}/lib/ && rm onnxruntime-${verString}.tgz 2>/dev/null
 }
 
 function get_linux_amd64_gpu() {
-    verString="linux-x64-gpu-1.15.1"
+    verString="linux-x64-gpu-1.18.0"
     dstDir="linux_amd64_gpu"
     rm -rf ${dstDir}; mkdir -p ${dstDir} 2>/dev/null
-    curl -o onnxruntime-${verString}.tgz -L https://github.com/microsoft/onnxruntime/releases/download/v1.15.1/onnxruntime-${verString}.tgz
+    curl -o onnxruntime-${verString}.tgz -L https://github.com/microsoft/onnxruntime/releases/download/v1.18.0/onnxruntime-${verString}.tgz
     tar -xzf onnxruntime-${verString}.tgz --strip-components=2 -C ${dstDir} onnxruntime-${verString}/lib/ && rm onnxruntime-${verString}.tgz 2>/dev/null
 }
 
 function get_linux_arm64_cpu() {
-    verString="linux-aarch64-1.15.1"
+    verString="linux-aarch64-1.18.0"
     dstDir="linux_arm64_cpu"
     rm -rf ${dstDir}; mkdir -p ${dstDir} 2>/dev/null
-    curl -o onnxruntime-${verString}.tgz -L https://github.com/microsoft/onnxruntime/releases/download/v1.15.1/onnxruntime-${verString}.tgz
+    curl -o onnxruntime-${verString}.tgz -L https://github.com/microsoft/onnxruntime/releases/download/v1.18.0/onnxruntime-${verString}.tgz
     tar -xzf onnxruntime-${verString}.tgz --strip-components=2 -C ${dstDir} onnxruntime-${verString}/lib/ && rm onnxruntime-${verString}.tgz 2>/dev/null
 }
 
 
 function get_osx_arm64() {
-    verString="osx-arm64-1.15.1"
+    verString="osx-arm64-1.18.0"
     dstDir="osx_arm64"
     rm -rf ${dstDir}; mkdir -p ${dstDir} 2>/dev/null
-    curl -o onnxruntime-${verString}.tgz -L https://github.com/microsoft/onnxruntime/releases/download/v1.15.1/onnxruntime-${verString}.tgz
+    curl -o onnxruntime-${verString}.tgz -L https://github.com/microsoft/onnxruntime/releases/download/v1.18.0/onnxruntime-${verString}.tgz
     tar -xzf onnxruntime-${verString}.tgz --strip-components=3 -C ${dstDir} ./onnxruntime-${verString}/lib/ && rm ./onnxruntime-${verString}.tgz 2>/dev/null
 }
 
